@@ -10,4 +10,16 @@
 #-------------------------------------------------------------------------------------------
 
 cohort: Spring 2025
+project_name: "Person of Interest Detection"
+description: "Finds the person of interest from images using CelebA dataset"
 
+paths:
+  data: "/Users/sankar/sankar/courses/llm/data/celeba"
+  embeddings_dir: "/Users/sankar/sankar/courses/llm/data"
+  images_dir: "img_align_celeba/img_align_celeba"
+  annotations_dir: "data/celeba"
+
+model:
+  name: "clip-ViT-B-32"
+  type: "sentence_transformer"
+  embedding_dim: 512

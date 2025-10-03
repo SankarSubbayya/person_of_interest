@@ -13,25 +13,22 @@ from PIL import Image
 from sentence_transformers import SentenceTransformer, util
 import pickle
 from typing import List, Tuple, Optional
-# Optional face detection (graceful fallback if not installed)
-try:
-    import cv2
-    cv2.setNumThreads(1)
-    cv2.ocl.setUseOpenCL(False)
-except Exception:
-    pass
 class CelebritySearchEngine:
     """Clean celebrity search engine for the CelebA dataset."""
     
     
-    def __init__(self, data_dir: str = "data/celeba", model_name: str = "clip-ViT-B-32"):
+    def __init__(self, data_dir: str = "data/celeba", model_name: str = "clip-ViT-B-32", embeddings_dir: Optional[str] = None):
         """Initialize the search engine."""
         self.data_dir = Path(data_dir)
-        self.images_dir = self.data_dir / "img_align_celeba" / "img_align_celeba"
+        # Resolve images directory automatically
+        self.images_dir = self._resolve_images_dir(self.data_dir)
         self.model_name = model_name
         self.model = None
         self.img_names = []
         self.img_emb = None
+        # Embeddings directory (defaults to data_dir if not provided)
+        self.embeddings_dir = Path(embeddings_dir) if embeddings_dir else self.data_dir
+        # Face detection removed; use plain PIL loading
     
     
     '''
@@ -69,16 +66,21 @@ class CelebritySearchEngine:
         
         # Check for precomputed embeddings
         if use_precomputed:
-            emb_filename = f'{self.data_dir}/celeba-dataset-embeddings.pkl'
+            emb_filename = str(self.embeddings_dir / 'celeba-dataset-embeddings.pkl')
             if os.path.exists(emb_filename):
                 print("Loading precomputed embeddings...")
                 with open(emb_filename, 'rb') as fIn:
                     self.img_names, self.img_emb = pickle.load(fIn)
+                # Rebase image paths if they don't exist at stored locations
+                self._maybe_rebase_img_paths()
                 print(f"✅ Loaded {len(self.img_names)} images with embeddings")
                 return
         
+        # Resolve images directory if not already
+        if not self.images_dir or not self.images_dir.exists():
+            self.images_dir = self._resolve_images_dir(self.data_dir)
         # Get all image paths
-        self.img_names = list(glob.glob(f'{self.data_dir}/img_align_celeba/img_align_celeba/*.jpg'))
+        self.img_names = [str(p) for p in sorted(self.images_dir.glob('*.jpg'))]
         print(f"Found {len(self.img_names)} images")
         
         if not self.img_names:
@@ -96,11 +98,7 @@ class CelebritySearchEngine:
             batch_images = []
             for filepath in batch_files:
                 try:
-                    #img = Image.open(filepath)
-                    img = self._crop_best_face(filepath) or Image.open(filepath)
-                    if img is None:
-                        print(f"No face detected for {filepath}")
-                        continue
+                    img = Image.open(filepath)
                     batch_images.append(img)
                 except Exception as e:
                     print(f"Error opening {filepath}: {e}")
@@ -130,40 +128,57 @@ class CelebritySearchEngine:
         else:
             raise RuntimeError("No images were successfully processed!")
 
-    def _crop_best_face(self, image_path: str) -> Optional[Image.Image]:
+    def _resolve_images_dir(self, base_dir: Path) -> Path:
+        """Find a directory under base_dir that contains CelebA JPGs.
+        Tries common layouts and falls back to a recursive search.
         """
-        Try to crop the highest-confidence face using RetinaFace.
-        Returns a PIL.Image or None on failure.
-        """
-        if not self.use_face_detection:
-            return None
+        candidates = [
+            base_dir,
+            base_dir / "img_align_celeba",
+            base_dir / "img_align_celeba" / "img_align_celeba",
+        ]
+        for cand in candidates:
+            try:
+                if cand.exists() and any(cand.glob('*.jpg')):
+                    return cand
+            except Exception:
+                continue
+        # Fallback recursive search: pick parent of first jpg found
         try:
-            faces = RetinaFace.detect_faces(image_path)
-            if not isinstance(faces, dict) or not faces:
-                return None
-            best = max(faces.values(), key=lambda f: f.get("score", 0.0))
-            if best.get("score", 0.0) < self.face_conf_threshold:
-                return None
-
-            x1, y1, x2, y2 = best["facial_area"]
-            img_bgr = cv2.imread(image_path)
-            if img_bgr is None:
-                return None
-            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-            face = img_rgb[y1:y2, x1:x2]
-            pil = Image.fromarray(face)
-            if self.face_target_size:
-                pil = pil.resize(self.face_target_size, Image.Resampling.LANCZOS)
-            return pil
+            for p in base_dir.rglob('*.jpg'):
+                return p.parent
         except Exception:
-            return None 
+            pass
+        # If nothing found, return the most likely default path
+        return base_dir / "img_align_celeba" / "img_align_celeba"
+
+    def _maybe_rebase_img_paths(self) -> None:
+        """If stored image paths no longer exist (dataset moved),
+        remap them to the current images directory by filename.
+        """
+        if not self.img_names:
+            return
+        num_missing = sum(1 for p in self.img_names if not os.path.exists(p))
+        if num_missing == 0:
+            return
+        # Ensure images_dir is resolved
+        if not self.images_dir.exists():
+            self.images_dir = self._resolve_images_dir(self.data_dir)
+        # Rebase using filenames
+        rebased = [str(self.images_dir / Path(p).name) for p in self.img_names]
+        self.img_names = rebased
     def save_embeddings(self, filename: str = "celeba-dataset-embeddings.pkl"):
         """Save embeddings to file."""
         if self.img_emb is None:
             print("No embeddings to save")
             return
             
-        emb_path = self.data_dir / filename
+        # Ensure embeddings directory exists
+        try:
+            self.embeddings_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        emb_path = self.embeddings_dir / filename
         with open(emb_path, 'wb') as f:
             pickle.dump((self.img_names, self.img_emb), f)
         print(f"✅ Embeddings saved to {emb_path}")

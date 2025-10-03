@@ -11,14 +11,12 @@ import numpy as np
 from PIL import Image
 
 from person_of_interest.celebrity_search import CelebritySearchEngine
+from person_of_interest import config
 
-import os, cv2, torch
-os.environ.setdefault("OPENCV_OPENCL_RUNTIME","disabled")
+import os, torch
 os.environ.setdefault("OMP_NUM_THREADS","1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS","1")
 os.environ.setdefault("MKL_NUM_THREADS","1")
-try: cv2.ocl.setUseOpenCL(False); cv2.setNumThreads(1)
-except: pass
 try: torch.set_num_threads(1); torch.set_num_interop_threads(1)
 except: pass
 
@@ -152,12 +150,13 @@ html, body, [class*="css"] {
 
 
 @st.cache_resource
-def load_search_engine():
+def load_search_engine(data_dir: str, embeddings_dir: str):
     """Load the search engine with caching."""
-    search_engine = CelebritySearchEngine()
+    # Resolve paths from config.yaml
+    search_engine = CelebritySearchEngine(data_dir=data_dir, embeddings_dir=embeddings_dir)
     
     # Check if embeddings exist
-    embeddings_file = "data/celeba/celeba-dataset-embeddings.pkl"
+    embeddings_file = os.path.join(embeddings_dir, "celeba-dataset-embeddings.pkl")
     if os.path.exists(embeddings_file):
         try:
             search_engine.load_model()
@@ -166,14 +165,12 @@ def load_search_engine():
         except Exception as e:
             st.error(f"Error loading cached embeddings: {e}")
     
-    # Load from scratch
-    try:
-        search_engine.load_model()
-        search_engine.load_dataset()
-        return search_engine, "Loaded and cached"
-    except Exception as e:
-        st.error(f"Error loading search engine: {e}")
-        return None, "Error"
+    # Do not compute embeddings on startup to avoid long-running jobs
+    st.warning(
+        f"No precomputed embeddings found at: {embeddings_file}.\n"
+        "Please generate embeddings offline and place the file there to enable search."
+    )
+    return None, "Embeddings missing"
 
 
 def display_image_grid(image_paths, titles=None, max_images=9):
@@ -263,9 +260,17 @@ def main():
         st.header("📊 Dataset Info")
         st.info("CelebA dataset with 202,599 celebrity images")
     
+    # Resolve paths from config
+    try:
+        DATA_DIR = config["paths"]["data"]
+        EMBEDDINGS_DIR = config["paths"].get("embeddings_dir", DATA_DIR)
+    except Exception:
+        DATA_DIR = "data/celeba"
+        EMBEDDINGS_DIR = "data"
+
     # Load search engine
     with st.spinner("Loading search engine..."):
-        search_engine, load_status = load_search_engine()
+        search_engine, load_status = load_search_engine(DATA_DIR, EMBEDDINGS_DIR)
     
     if search_engine is None:
         st.error("Failed to load search engine. Please check your data directory.")
@@ -308,7 +313,7 @@ def main():
                             #with col3:
                                 #st.metric("Worst Match Score", f"{min(scores):.3f}")
                         
-                        # Display images
+                        # Display images with robust open and fallback captions
                         display_image_grid(results, max_images=num_results)
                         
                     except Exception as e:

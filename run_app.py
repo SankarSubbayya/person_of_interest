@@ -7,6 +7,7 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+from person_of_interest import config
 
 def main():
     """Run the Streamlit app."""
@@ -18,25 +19,37 @@ def main():
         print("❌ Streamlit not found. Installing...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "streamlit"])
     
-    # Check if data directory exists
-    data_dir = Path("data/celeba")
+    # Resolve data directory from config.yaml (fallback to local)
+    try:
+        data_dir_str = config["paths"]["data"]
+    except Exception:
+        data_dir_str = "data/celeba"
+    data_dir = Path(data_dir_str)
     if not data_dir.exists():
         print("❌ CelebA dataset not found!")
-        print("Please run the download script first:")
-        print("python download_celeba.py")
+        print(f"Expected at: {data_dir}")
+        print("Update paths.data in config.yaml or ensure the dataset exists.")
         return
     
-    # Check if images exist
-    images_dir = data_dir / "img_align_celeba" / "img_align_celeba"
-    if not images_dir.exists() or not list(images_dir.glob("*.jpg")):
+    # Check if images exist (auto-detect common layouts)
+    candidate_image_dirs = [
+        data_dir,
+        data_dir / "img_align_celeba",
+        data_dir / "img_align_celeba" / "img_align_celeba",
+    ]
+    images_dir = next((d for d in candidate_image_dirs if d.exists() and list(d.glob("*.jpg"))), None)
+    if images_dir is None:
         print("❌ CelebA images not found!")
-        print(f"Expected images in: {images_dir}")
-        print("Please ensure the dataset is properly downloaded and extracted.")
+        print("Checked:")
+        for d in candidate_image_dirs:
+            print(f" - {d}")
+        print("Please ensure the images (.jpg) are present under one of the above directories.")
         return
     
     # Run the Streamlit app
+    port = "8502"
     print("🚀 Starting Clean Celebrity Search Streamlit app...")
-    print("📱 Open your browser to http://localhost:8501")
+    print(f"📱 Open your browser to http://localhost:{port}")
     print("⏹️  Press Ctrl+C to stop the app")
 
     env = os.environ.copy()
@@ -50,7 +63,7 @@ def main():
     try:
         subprocess.run([
             sys.executable, "-m", "streamlit", "run", "streamlit_app.py",
-            "--server.port", "8502",
+            "--server.port", port,
             "--server.address", "localhost"
         ])
     except KeyboardInterrupt:

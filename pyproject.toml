@@ -1,0 +1,37 @@
+[project]
+name = "person-of-interest"
+version = "0.1.0"
+description = "Finds the person of interest from the images"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ipyplot>=1.1.2",
+    "kagglehub>=0.3.13",
+    "pathlib>=1.0.1",
+    "pillow>=11.3.0",
+    "sentence-transformers>=5.1.1",
+    "streamlit>=1.49.1",
+    "svlearn-bootcamp>=0.1.7",
+    "transformers>=4.56.2",
+    "opencv-python>=4.11.0.86",
+    "retina-face>=0.0.17"
+]
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "README.md",
+    "pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/person_of_interest"]

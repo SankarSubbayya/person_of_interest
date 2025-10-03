@@ -1,0 +1,9 @@
+# Core dependencies for clean celebrity search
+streamlit>=1.28.0
+sentence-transformers>=2.2.0
+torch>=2.0.0
+Pillow>=10.0.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+pathlib
+

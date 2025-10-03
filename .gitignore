@@ -1,0 +1,28 @@
+# Python-generated files
+
+data/
+.env
+__pycache__/
+*.py[oc]
+build/
+dist/
+*.pkl
+*.zip
+*.tar
+*.tgz
+*.whl
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# large data
+data/
+dist/
+*.pkl
+*.zip
+*.tar
+*.tgz
+*.whl
+.DS_Store
